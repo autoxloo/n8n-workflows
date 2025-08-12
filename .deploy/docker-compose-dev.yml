@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  app:
+    deploy:
+      labels:
+        - "traefik.http.routers.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.rule=Host(`n8n-workflows.xloo-dev-d2.s.xloo.com`)"

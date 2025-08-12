@@ -1,0 +1,58 @@
+name: Build/deploy dev docker image
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ENVIRONMENT_NAME: XLOO-DEV-D2
+
+  REGISTRY: ghcr.io
+  REGISTRY_USER: xloo
+  REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build_docker_image:
+    uses: ./.github/workflows/build-for-dev-and-prod-reusable.yml
+    with:
+      environment-name: XLOO-DEV-D2
+
+  Deploy:
+    runs-on: xloo-dev-d2
+    needs: [ build_docker_image ]
+    permissions:
+      contents: read  #  to fetch code (actions/checkout)
+      packages: read  #  to fetch packages (docker)
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      - name: Set up environment variables
+        run: |
+          export CI_COMMIT_REF_SHORT=${GITHUB_REF##*/}
+          export CI_COMMIT_REF_SLUG=${CI_COMMIT_REF_SHORT//./_}
+          echo "CI_COMMIT_REF_SLUG=${CI_COMMIT_REF_SHORT//./_}" >> $GITHUB_ENV
+          echo "CI_PROJECT_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
+          echo "CI_REGISTRY_IMAGE=${{ env.REGISTRY }}/autoxloo/${GITHUB_REPOSITORY##*/}:${CI_COMMIT_REF_SHORT//./_}" >> $GITHUB_ENV
+
+      - name: Deploy
+        env:
+          DOCKER_HOST: "tcp://xloo-dev-d2.s.xloo.com:2317"
+          DOCKER_TLS_VERIFY: 1
+          DOCKER_CERT_PATH: "/tmp/certs"
+        run: |
+          mkdir -p $DOCKER_CERT_PATH
+          echo ${{ secrets.TLSCACERT_XLOO_DEV_D2 }} | base64 -d > $DOCKER_CERT_PATH/ca.pem
+          echo ${{ secrets.TLSCERT_XLOO_DEV_D2 }} | base64 -d > $DOCKER_CERT_PATH/cert.pem
+          echo ${{ secrets.TLSKEY_XLOO_DEV_D2 }} | base64 -d > $DOCKER_CERT_PATH/key.pem
+          docker image pull $CI_REGISTRY_IMAGE
+          docker stack deploy -c .deploy/docker-compose.yml -c .deploy/docker-compose-dev.yml n8n-workflows-dev --with-registry-auth
+          rm -rf $DOCKER_CERT_PATH

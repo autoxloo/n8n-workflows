@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  app:
+    image: ${CI_REGISTRY_IMAGE}
+    networks:
+      - default
+      - ext
+    deploy:
+      limits:
+        cpus: '1.00'
+        memory: 1024M
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      labels:
+        - traefik.enable=true
+        - traefik.http.services.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.loadbalancer.server.port=8000
+        # main URL
+        - traefik.http.routers.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.service=${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}
+        - traefik.http.routers.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.middlewares=secure-headers@file
+        - traefik.http.routers.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.tls.certresolver=le
+        - traefik.http.routers.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.tls=true
+        - traefik.http.routers.${CI_PROJECT_NAME}_${CI_COMMIT_REF_SLUG}.entrypoints=http,https
